@@ -34,7 +34,7 @@ export class AppComponent implements OnInit {
   // Método para Iniciar Sesión con Azure AD / Entra ID
   iniciarSesion(): void {
     this.authService.loginPopup({
-      scopes: ['openid', 'profile', 'user.read']
+      scopes: ['openid', 'profile', 'email']
     }).subscribe({
       next: (result: AuthenticationResult) => {
         this.authService.instance.setActiveAccount(result.account);
@@ -57,35 +57,34 @@ export class AppComponent implements OnInit {
     const account = this.authService.instance.getActiveAccount();
 
     if (!account) {
-      console.warn('No hay usuario autenticado.');
+      console.warn('No hay usuario autenticado en la sesión.');
       return;
     }
 
-    // Adquirir el token de forma silenciosa para adjuntarlo a la petición HTTP
+    // Adquirir el idToken necesario para el AzureAD-Authorizer de AWS
     this.authService.acquireTokenSilent({
       account: account,
-      scopes: ['openid', 'profile', 'user.read']
+      scopes: ['openid', 'profile', 'email']
     }).subscribe({
       next: (response: AuthenticationResult) => {
-        // Se utiliza idToken prioritariamente para validar claims en API Gateway
-        const token = response.idToken || response.accessToken;
+        // idToken contiene el Client ID correcto en el claim 'aud' exigido por AWS
+        const token = response.idToken;
 
-        // Construir la cabecera Authorization con el token Bearer
         const headers = new HttpHeaders({
           'Authorization': `Bearer ${token}`
         });
 
-        // Llamada al API Gateway con los headers
+        // Invocar la ruta protegida en API Gateway
         this.http.get(this.apiGatewayUrl, { headers }).subscribe({
           next: (data: any) => {
             this.productos = data;
-            console.log('Productos recibidos exitosamente (HTTP 200 OK):', data);
+            console.log('Respuesta exitosa API Gateway (200 OK):', data);
           },
           error: (err) => console.error('Error al invocar API Gateway:', err)
         });
       },
       error: (error) => {
-        console.error('Error obteniendo el token de acceso:', error);
+        console.error('Error al obtener idToken silencioso:', error);
       }
     });
   }
