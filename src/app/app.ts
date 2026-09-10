@@ -87,7 +87,7 @@ export class AppComponent implements OnInit {
         });
 
         // 3. Invocar API Gateway
-        this.http.get('https://i5xfqp6s96.execute-api.us-east-1.amazonaws.com/api/pedidos', { headers })
+        this.http.get('https://i5xfqp6s96.execute-api.us-east-1.amazonaws.com/api/productos', { headers })
           .subscribe({
             next: (data) => {
               this.apiData = data;
