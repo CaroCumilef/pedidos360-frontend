@@ -1,0 +1,23 @@
+<div style="padding: 2rem; font-family: sans-serif;">
+  <h1>Pedidos360 - Frontend</h1>
+
+  <div *ngIf="!isLoggedIn">
+    <button (click)="login()">Iniciar Sesión con Azure AD</button>
+  </div>
+
+  <div *ngIf="isLoggedIn">
+    <p><strong>Usuario:</strong> {{ userName }}</p>
+    <button (click)="consultarApi()" style="margin-right: 10px;">Obtener Pedidos (200 OK)</button>
+    <button (click)="logout()">Cerrar Sesión</button>
+
+    <div *ngIf="apiResponse" style="margin-top: 20px; background: #e6ffe6; padding: 15px; border-radius: 5px;">
+      <h3>Respuesta 200 OK desde AWS API Gateway:</h3>
+      <pre>{{ apiResponse | json }}</pre>
+    </div>
+
+    <div *ngIf="errorMsg" style="margin-top: 20px; background: #ffe6e6; padding: 15px; border-radius: 5px;">
+      <h3>Error de Invocación:</h3>
+      <pre>{{ errorMsg }}</pre>
+    </div>
+  </div>
+</div>
