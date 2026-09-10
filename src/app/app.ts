@@ -1,108 +1,90 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { RouterOutlet } from '@angular/router';
-import { MsalService } from '@azure/msal-angular';
+import { HttpClient, HttpHeaders, HttpClientModule } from '@angular/common/http';
+import { MsalService, MsalModule } from '@azure/msal-angular';
 import { AuthenticationResult } from '@azure/msal-browser';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet],
-  templateUrl: './app.html',
-  styleUrl: './app.css'
+  imports: [CommonModule, HttpClientModule, MsalModule],
+  templateUrl: './app.component.html',
+  styleUrls: ['./app.component.css']
 })
 export class AppComponent implements OnInit {
-  isLoggedIn = false;
-  apiData: any = null;
-  apiResponse: any = null;
-  errorMsg: string = '';
-  userName: string = '';
+  title = 'Pedidos360 - Frontend';
+  usuario: string = '';
+  productos: any[] = [];
+  apiGatewayUrl = 'https://i5xfqp6s96.execute-api.us-east-1.amazonaws.com/productos';
 
   constructor(
-    private msalService: MsalService, 
+    private authService: MsalService,
     private http: HttpClient
   ) {}
 
   ngOnInit(): void {
-    this.msalService.handleRedirectObservable().subscribe({
-      next: (result: AuthenticationResult | null) => {
-        if (result && result.account) {
-          this.msalService.instance.setActiveAccount(result.account);
-        }
-        this.checkAccount();
-      },
-      error: (error) => console.error('Error en el callback de MSAL:', error)
-    });
-
-    this.checkAccount();
-  }
-
-  checkAccount(): void {
-    const activeAccount = this.msalService.instance.getActiveAccount() || 
-                          this.msalService.instance.getAllAccounts()[0];
-    
-    if (activeAccount) {
-      this.msalService.instance.setActiveAccount(activeAccount);
-      this.isLoggedIn = true;
-      this.userName = activeAccount.name || activeAccount.username;
-    } else {
-      this.isLoggedIn = false;
-      this.userName = '';
+    // Verificar si el usuario ya inició sesión con Azure AD
+    const accounts = this.authService.instance.getAllAccounts();
+    if (accounts.length > 0) {
+      this.authService.instance.setActiveAccount(accounts[0]);
+      this.usuario = accounts[0].name || accounts[0].username;
     }
   }
 
-  login(): void {
-    this.msalService.loginRedirect();
+  // Método para Iniciar Sesión con Azure AD / Entra ID
+  iniciarSesion(): void {
+    this.authService.loginPopup({
+      scopes: ['user.read', 'openid', 'profile']
+    }).subscribe({
+      next: (result: AuthenticationResult) => {
+        this.authService.instance.setActiveAccount(result.account);
+        this.usuario = result.account.name || result.account.username;
+        console.log('Sesión iniciada con éxito:', result);
+      },
+      error: (error) => console.error('Error al iniciar sesión:', error)
+    });
   }
 
-  logout(): void {
-    this.msalService.logoutRedirect();
+  // Método para Cerrar Sesión
+  cerrarSesion(): void {
+    this.authService.logoutPopup();
+    this.usuario = '';
+    this.productos = [];
   }
 
-  consultarApi(): void {
-    this.errorMsg = '';
-    this.apiData = null;
-    this.apiResponse = null;
-
-    const account = this.msalService.instance.getActiveAccount();
+  // Método para invocar el API Gateway con Token JWT (Respuesta 200 OK)
+  obtenerProductos(): void {
+    const account = this.authService.instance.getActiveAccount();
 
     if (!account) {
-      this.errorMsg = 'No hay una cuenta activa de Azure AD.';
+      console.warn('No hay usuario autenticado.');
       return;
     }
 
-    // 1. Obtener el token JWT en silencio
-    this.msalService.acquireTokenSilent({
-      scopes: ['openid', 'profile', 'email'],
-      account: account
+    // Solicitar el token de acceso de forma silenciosa para adjuntarlo a la petición
+    this.authService.acquireTokenSilent({
+      account: account,
+      scopes: ['user.read']
     }).subscribe({
       next: (response: AuthenticationResult) => {
-        // ID Token contiene el emisor (iss) y audiencia configurados en API Gateway
-        const token = response.idToken || response.accessToken;
-        
-        // 2. Adjuntar el token como Bearer Header
+        const token = response.accessToken;
+
+        // Construir la cabecera Authorization con el token JWT
         const headers = new HttpHeaders({
           'Authorization': `Bearer ${token}`
         });
 
-        // 3. Invocar API Gateway
-        this.http.get('https://i5xfqp6s96.execute-api.us-east-1.amazonaws.com/productos', { headers })
-          .subscribe({
-            next: (data) => {
-              this.apiData = data;
-              this.apiResponse = data;
-              console.log('Respuesta 200 OK desde AWS API Gateway:', data);
-            },
-            error: (err) => {
-              this.errorMsg = JSON.stringify(err, null, 2);
-              console.error('Error al invocar API Gateway:', err);
-            }
-          });
+        // Llamar al API Gateway pasando los headers
+        this.http.get(this.apiGatewayUrl, { headers }).subscribe({
+          next: (data: any) => {
+            this.productos = data;
+            console.log('Productos recibidos exitosamente (HTTP 200 OK):', data);
+          },
+          error: (err) => console.error('Error al invocar API Gateway:', err)
+        });
       },
-      error: (err) => {
-        console.error('Error al adquirir token:', err);
-        this.errorMsg = 'No se pudo obtener el token de autenticación.';
+      error: (error) => {
+        console.error('Error obteniendo el token de acceso:', error);
       }
     });
   }
