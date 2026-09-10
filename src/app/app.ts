@@ -34,7 +34,7 @@ export class AppComponent implements OnInit {
   // Método para Iniciar Sesión con Azure AD / Entra ID
   iniciarSesion(): void {
     this.authService.loginPopup({
-      scopes: ['user.read', 'openid', 'profile']
+      scopes: ['openid', 'profile', 'user.read']
     }).subscribe({
       next: (result: AuthenticationResult) => {
         this.authService.instance.setActiveAccount(result.account);
@@ -61,20 +61,21 @@ export class AppComponent implements OnInit {
       return;
     }
 
-    // Solicitar el token de acceso de forma silenciosa para adjuntarlo a la petición
+    // Adquirir el token de forma silenciosa para adjuntarlo a la petición HTTP
     this.authService.acquireTokenSilent({
       account: account,
-      scopes: ['user.read']
+      scopes: ['openid', 'profile', 'user.read']
     }).subscribe({
       next: (response: AuthenticationResult) => {
-        const token = response.accessToken;
+        // Se utiliza idToken prioritariamente para validar claims en API Gateway
+        const token = response.idToken || response.accessToken;
 
-        // Construir la cabecera Authorization con el token JWT
+        // Construir la cabecera Authorization con el token Bearer
         const headers = new HttpHeaders({
           'Authorization': `Bearer ${token}`
         });
 
-        // Llamar al API Gateway pasando los headers
+        // Llamada al API Gateway con los headers
         this.http.get(this.apiGatewayUrl, { headers }).subscribe({
           next: (data: any) => {
             this.productos = data;
